@@ -2,6 +2,7 @@
 using System.Text.Json;
 using ModBuilderCLI.Core.IO;
 using ModBuilderCLI.Core.Misc;
+using ModBuilderCLI.Core.RecordHolder;
 
 namespace ModBuilderCLI.Core.API;
 
@@ -21,14 +22,38 @@ public class ApiHandler
 
         return client;
     }
-    public static async Task<string> SearchModrinth(string query)
+
+    public static async Task<ModrinthSearchResponse> SearchModrinth(string query, int limit = 20)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.modrinth.com/v2/search?query={query}");
-        var response = await HttpClient.SendAsync(request);
+        var url = $"https://api.modrinth.com/v2/search?query={Uri.EscapeDataString(query)}&limit={limit}";
+        var json = await HttpClient.GetStringAsync(url);
+
+        try
+        {
+            return JsonSerializer.Deserialize<ModrinthSearchResponse>(json)
+                           ?? throw new EmptyResponseException("Modrinth returned an empty search response.");
+        }
+        catch (Exception e)
+        {
+            return new ModrinthSearchResponse([], 0);
+        }
         
-        response.EnsureSuccessStatusCode();
         
-        return await response.Content.ReadAsStringAsync();
+    }
+
+    public static async Task<ModrinthVersion[]> GetProjectVersionsModrinth(string id)
+    {
+        var response = await HttpClient.GetAsync($"https://api.modrinth.com/v2/project/{id}/version");
+        var json = await response.Content.ReadAsStringAsync();
+        try
+        {
+            return JsonSerializer.Deserialize<ModrinthVersion[]>(json) ??
+                   throw new EmptyResponseException("Modrinth returned an empty version list.");
+        }
+        catch (Exception e)
+        {
+            return [];
+        }
     }
 
     public static async Task<List<T>> GetTagsAsync<T>(string tag)
@@ -49,5 +74,4 @@ public class ApiHandler
             .Where(l => l.SupportedProjectTypes.Contains("mod"))
             .Select(l => l.Name)
             .ToList();
-    
 }
